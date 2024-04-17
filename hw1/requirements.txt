@@ -1,4 +1,5 @@
 langchain
 langchain_google_genai
-
+bs4
+wikipedia
 
