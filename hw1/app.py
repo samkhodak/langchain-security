@@ -3,20 +3,13 @@ from langchain_community.document_loaders import WikipediaLoader, AsyncHtmlLoade
 from langchain_community.document_transformers import BeautifulSoupTransformer
 from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.chains.conversation.memory import ConversationSummaryMemory
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain.chains import ConversationChain
+from langchain_core.runnables import RunnablePassthrough
 import traceback
 
-
-def question_prompt(llm, query):
-    prompt = [
-        SystemMessage(content="""You are a bot that helps answer questions about political figures. Find the relevant 
-        information about the political figure the user gives, then answer their question. Limit your answer to ten 
-        sentences. If you do not know how to answer a question, just say that you don't know."""
-        ),
-        HumanMessage(content=query),
-    ]
-    return prompt
 
 def embed_docs(documents, vector_db):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=50)
@@ -24,29 +17,19 @@ def embed_docs(documents, vector_db):
     vector_db.add_documents(documents=split_docs)
 
 
-
 def load_and_transform(urls, vector_db):
     loaded_web_docs = AsyncHtmlLoader(urls).load()
     transformer = BeautifulSoupTransformer()
     transformed_docs = transformer.transform_documents(loaded_web_docs, tags_to_extract=["p"])
-    #for page in transformed_docs:
-    #    print(page.page_content)
     embed_docs(transformed_docs, vector_db)
 
     loaded_wiki_docs = WikipediaLoader(query="Donald Trump", load_max_docs=3).load() 
     loaded_wiki_docs.extend(WikipediaLoader(query="Joe Biden", load_max_docs=3).load())
     embed_docs(loaded_wiki_docs, vector_db)
 
-    retriever = vector_db.as_retriever()
 
-    #docs = retriever.get_relevant_documents("Donald Trump")
-    #print(docs)
-    print("SAVED DOCUMENTS -> \n")
-    document_data_sources = set()
-    for doc_metadata in retriever.vectorstore.get()['metadatas']:
-        document_data_sources.add(doc_metadata['source'])
-    for doc in document_data_sources:
-        print(f"  {doc}")
+def combine_docs(documents):
+    return "\n\n".join(document.page_content for document in documents)
 
 
 
@@ -56,22 +39,45 @@ def main():
         embedding_function=GoogleGenerativeAIEmbeddings(model="models/embedding-001", task_type="retrieval_query"),
         persist_directory="./chroma/.chromadb"
     )
+
     llm = GoogleGenerativeAI(model="gemini-pro")
     urls = ["https://www.whitehouse.gov/about-the-white-house/presidents/donald-j-trump/", "https://www.whitehouse.gov/administration/president-biden/"]
     load_and_transform(urls, vector_db)
 
+
+    retriever = vector_db.as_retriever()
+    print_sources(retriever)
+
+
+    context_prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are a bot that helps answer questions about political figures. Find the relevant 
+        information about the political figure the user gives, then answer their question. In searching 
+        for accurate information, use only the provided context. Limit your answer to ten sentences. If 
+        you do not know how to answer a question, just say that you don't know.
+        Provided context: {context}"""),
+        ("human", "{query}"),
+    ])
+        
+    query_chain = (
+            {"context": retriever | combine_docs, "query": RunnablePassthrough()}
+            | context_prompt
+            | llm
+    )
+
+
+    print("""\n\nWelcome to the 2024 Presidential candidates RAG app. Ask some questions about the two current nominees!
+            \nEnter \"exit\" to quit the program.""")
     while True:
         try:
             line = input("\n\nEnter query >> ")
-            if line:
-                for chunk in llm.stream(question_prompt(llm,line)):
+            if line and line != "exit":
+                for chunk in query_chain.stream(line):
                     print(chunk, end=" ", flush=True)
             else:
                 break
         except Exception:
             traceback.print_exc()
             break
-
 
 
 if __name__ == "__main__":
