@@ -28,6 +28,13 @@ def load_and_transform(urls, vector_db):
     embed_docs(loaded_wiki_docs, vector_db)
 
 
+def print_sources(retriever):
+    print("\nThe LLM currently has access to these sources as part of its context:\n")
+    vector_metadata = retriever.vectorstore.get().get('metadatas')
+    source_set = {document.get('source') for document in vector_metadata}
+    print("\n".join(source_set))
+
+
 def combine_docs(documents):
     return "\n\n".join(document.page_content for document in documents)
 
