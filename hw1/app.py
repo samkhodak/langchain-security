@@ -73,7 +73,7 @@ def retrieve_file(file_path) -> list:
         return file_contents
     
 
-def db_exists(vector_db):
+def db_exists(vector_db) -> bool:
     """
     Checks if chromadb database has any existing embeddings. 
     :param vector_db: Chroma object
