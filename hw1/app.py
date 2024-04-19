@@ -17,15 +17,18 @@ def embed_docs(documents, vector_db):
     vector_db.add_documents(documents=split_docs)
 
 
-def load_and_transform(urls, vector_db):
+def load_and_transform(vector_db):
+    urls = retrieve_file("./sources/urls/urls.txt")
+    wiki_topics = retrieve_file("./sources/wiki/wiki-pages.txt")
+
     loaded_web_docs = AsyncHtmlLoader(urls).load()
     transformer = BeautifulSoupTransformer()
     transformed_docs = transformer.transform_documents(loaded_web_docs, tags_to_extract=["p"])
     embed_docs(transformed_docs, vector_db)
 
-    loaded_wiki_docs = WikipediaLoader(query="Donald Trump", load_max_docs=3).load() 
-    loaded_wiki_docs.extend(WikipediaLoader(query="Joe Biden", load_max_docs=3).load())
-    embed_docs(loaded_wiki_docs, vector_db)
+    for topic in wiki_topics:
+        loaded_wiki_docs = WikipediaLoader(query=topic, load_max_docs=3).load() 
+        embed_docs(loaded_wiki_docs, vector_db)
 
 
 def print_sources(retriever):
@@ -38,6 +41,12 @@ def print_sources(retriever):
 def combine_docs(documents):
     return "\n\n".join(document.page_content for document in documents)
 
+def retrieve_file(file_path) -> list:
+    with open(file_path, 'r') as file:
+        file_contents = [line.rstrip('\n') for line in file] #Strip newline from end of each line
+        return file_contents
+     
+
 
 
 
@@ -48,8 +57,8 @@ def main():
     )
 
     llm = GoogleGenerativeAI(model="gemini-pro")
-    urls = ["https://www.whitehouse.gov/about-the-white-house/presidents/donald-j-trump/", "https://www.whitehouse.gov/administration/president-biden/"]
-    load_and_transform(urls, vector_db)
+    #urls = ["https://www.whitehouse.gov/about-the-white-house/presidents/donald-j-trump/", "https://www.whitehouse.gov/administration/president-biden/"]
+    load_and_transform(vector_db)
 
 
     retriever = vector_db.as_retriever()
@@ -70,10 +79,11 @@ def main():
             | context_prompt
             | llm
     )
-
-
+    
+    
     print("""\n\nWelcome to the 2024 Presidential candidates RAG app. Ask some questions about the two current nominees!
             \nEnter \"exit\" to quit the program.""")
+    ("""
     while True:
         try:
             line = input("\n\nEnter query >> ")
@@ -85,7 +95,7 @@ def main():
         except Exception:
             traceback.print_exc()
             break
-
+    """)
 
 if __name__ == "__main__":
     main()
