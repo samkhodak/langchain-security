@@ -5,7 +5,6 @@ from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_core.runnables import RunnablePassthrough
 from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
 from langchain_core.output_parsers import StrOutputParser
