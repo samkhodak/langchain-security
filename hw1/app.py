@@ -71,7 +71,16 @@ def retrieve_file(file_path) -> list:
     with open(file_path, 'r') as file:
         file_contents = [line.rstrip('\n') for line in file] #Strip newline from end of each line
         return file_contents
-     
+    
+
+def db_exists(vector_db):
+    """
+    Checks if chromadb database has any existing embeddings. 
+    :param vector_db: Chroma object
+    :return: true if embeddings exist, false otherwise
+    """
+    existing_embeddings = vector_db.get(include=['uris']).get('ids')
+    return True if existing_embeddings else False
 
 
 
@@ -95,8 +104,8 @@ def main():
 
     gpt_llm = ChatOpenAI(model_name="gpt-3.5-turbo")
 
-   
-    load_and_transform(vector_db)
+    if not db_exists(vector_db):
+        load_and_transform(vector_db)
 
 
     retriever = vector_db.as_retriever()
