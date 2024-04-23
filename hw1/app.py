@@ -1,4 +1,4 @@
-from langchain_google_genai import GoogleGenerativeAI
+from langchain_google_genai import GoogleGenerativeAI, HarmCategory, HarmBlockThreshold
 from langchain_community.document_loaders import WikipediaLoader, AsyncHtmlLoader 
 from langchain_community.document_transformers import BeautifulSoupTransformer
 from langchain_community.vectorstores import Chroma
@@ -6,7 +6,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_core.runnables import RunnablePassthrough
-from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
 import traceback

@@ -2,3 +2,4 @@ env/
 *.pyc
 __pycache__/
 hw1/chroma/
+hw2/hw2.code-workspace
