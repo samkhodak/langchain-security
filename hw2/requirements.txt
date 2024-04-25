@@ -2,3 +2,5 @@ langchain
 langchain_google_genai
 langchain-experimental
 langchainhub
+pyowm
+langchain_openai
