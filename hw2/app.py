@@ -19,6 +19,12 @@ client = Client()
 
 
 class ProjectNameInput(BaseModel):
+    """
+    This class enforces typechecking in the project_token_info tool.
+    It extends the BaseModel class from Pydantic. 
+    :param project_name: the name of a project in the LangSmith client
+    :type project_name: str
+    """
     project_name: str = Field(description="Should be a string of text of the user's choice for an existing project name.")
 
 
@@ -41,8 +47,21 @@ def project_token_info(project_name):
 
 
 def create_agent_executor(llm, tools, prompt):
-    # We need an input_key for memory so the buffer doesn't confuse what passed-in input is from the user
+    """
+    Creates a memory buffer and agent executor for an LLM.
+    :param llm: Initialized large language model
+    :type llm: LangChain LLM object
+    :param tools: List of LangChain tools
+    :type tools: list
+    :param prompt: Prompt for agent
+    :type prompt: LangChain PromptTemplate
+    :return: Memory buffer for agent 
+    :rtype: ConversationMemoryBuffer
+    :return: Completed agent executor
+    :rtype: AgentExecutor
+    """
     memory = ConversationBufferMemory(memory_key="history", input_key="input", return_messages=True)
+    # We need an input_key for memory so the buffer doesn't confuse what passed-in input is from the user.
     agent = create_react_agent(llm, tools, prompt)
     executor = AgentExecutor(
             agent=agent, 
@@ -115,7 +134,7 @@ def main():
             traceback.print_exc()
             break
     
-    print("\nThanks for using the Agent. Have a nice day!\n")
+    print("\nThanks for using the agent. Have a nice day!\n")
 
 
 
