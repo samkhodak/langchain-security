@@ -4,6 +4,11 @@ from langsmith import Client
 from langchain import hub
 from langchain_core.pydantic_v1 import BaseModel, Field, validator
 from langchain.tools import tool
+from langchain_community.document_loaders.generic import GenericLoader
+from langchain_community.document_loaders.parsers import LanguageParser
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnablePassthrough
 import traceback
 import os
 import re
@@ -13,16 +18,27 @@ os.environ["LANGCHAIN_PROJECT"] = f"gensec-hw4"
 os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
 client = Client()
 
+gemini_llm = GoogleGenerativeAI(
+    model="gemini-pro",
+    temperature=0,
+    safety_settings = {
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE, 
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE, 
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE, 
+    }
+)
+
 class DocumentFilename(BaseModel):
     """
-    This class enforces typechecking in the check_filename tool.
+    This class enforces typechecking in the load_code_file tool.
     It extends the BaseModel class from Pydantic. 
-    :param file_name: name of a file, including extension. 
+    :param file_name: name of a file, including extension. Remove any previous path before the filename.
     :type TODO: str
     """
     file_name: str = Field(description="Should be a filename string with a suffix, such as code.py or code.cpp - Nothing else is accepted. ")
     @validator('file_name')
     def validate_filename(cls, value):
+        file_name = value.replace("'", "")
         pattern = None
         try:
             pattern = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?\.[a-zA-Z0-9_-]+$", re.M)
@@ -35,33 +51,50 @@ class DocumentFilename(BaseModel):
         return result.group()
 
 
-@tool("check_filename", args_schema=DocumentFilename, return_direct=False)
-def check_filename(file_name):
+@tool("load_code_file", args_schema=DocumentFilename, return_direct=False)
+def load_code_file(file_name):
     """
-    Useful for checking the validity of a filename that the user passes in. Returns a filename that has been checked for validity..
+    Useful for retrieving code from a document in the filesystem. Given a file name, the tool will retrieve the file 
+    and copy the code inside of it, returning a string of code for the LLM to analyze. 
     """
-    return file_name
+
+    loader = GenericLoader.from_filesystem(
+            path=f"./{file_name}",
+            glob="*",
+            suffixes=[".py", ".txt", ".cpp"],
+            parser=LanguageParser(),
+    )
+    docs = loader.load()
+    document_code = "\n\n\n".join([document.page_content for document in docs])
+
+    prompt = PromptTemplate.from_template("""You are an intelligent AI code deobfuscation bot. Your directive is to take a piece of
+        code and deobfuscate it, making it more understandable to the human programmer. Take each piece of deobfuscation step-by-step, so that
+        the final result is a block of code that makes sense as a whole, and the purpose of the code is understandable. Improve any 
+        potentially confusing variable names with better, self-documenting names.
+        Your final answer MUST be in code format - output only a document of code. 
+        Code content: {code_content}
+    """)
+
+    deobfusc_chain = ({"code_content":RunnablePassthrough()} | prompt | gemini_llm)
+    result = deobfusc_chain.invoke(document_code)
+    
+    return result
+    
+
+
 
 
 
 
 def main():
-    gemini_llm = GoogleGenerativeAI(
-        model="gemini-pro",
-        temperature=0,
-        safety_settings = {
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE, 
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE, 
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE, 
-        }
-    )
     base_prompt = hub.pull("langchain-ai/react-agent-template")
-    prompt = base_prompt.partial(instructions="""You are an agent that is used chiefly for helping the user deobfuscate code.
+    prompt = base_prompt.partial(instructions="""You are an agent that is used for helping the user view and deobfuscate code.
         Be as helpful as possible. If you are unable to produce an answer that is helpful to the user, say so.
-        The user is allowed to look up information related to programming and deobfuscation ONLY. Deny them in any other case.""")
+        The user is allowed to look up information related to programming and deobfuscation ONLY. Deny them in any other case.
+        Use AT MOST one call to load_code_file when it is needed.""")
 
     tools = load_tools(["serpapi"])
-    tools.extend([check_filename])
+    tools.extend([load_code_file])
 
     gemini_agent = create_react_agent(gemini_llm, tools, prompt)
     gemini_executor = AgentExecutor(
@@ -84,7 +117,6 @@ def main():
 
         except Exception:
             traceback.print_exc()
-            break
 
     print("Thanks for using the deobfuscator!")
 
