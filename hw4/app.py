@@ -6,7 +6,6 @@ from langchain_core.pydantic_v1 import BaseModel, Field, validator
 from langchain.tools import tool
 from langchain_community.document_loaders.generic import GenericLoader
 from langchain_community.document_loaders.parsers import LanguageParser
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 import traceback
@@ -28,34 +27,37 @@ gemini_llm = GoogleGenerativeAI(
     }
 )
 
+
 class DocumentFilename(BaseModel):
     """
-    This class enforces typechecking in the load_code_file tool.
+    This class enforces typechecking for a provided file name. 
     It extends the BaseModel class from Pydantic. 
     :param file_name: name of a file, including extension. Remove any previous path before the filename.
-    :type TODO: str
+    :type file_name: str
     """
     file_name: str = Field(description="Should be a filename string with a suffix, such as code.py or code.cpp - Nothing else is accepted. ")
     @validator('file_name')
     def validate_filename(cls, value):
-        file_name = value.replace("'", "")
-        pattern = None
         try:
+            # Remove potential quotes before checking filename.
+            file_name = value.replace("'", "").replace("\"", "")
+            # This RegEx pattern should only accept filenames with a dot extension (e.g., code.cpp, app.py, a.txt)
             pattern = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?\.[a-zA-Z0-9_-]+$", re.M)
+            result = re.search(pattern, file_name)
         except Exception:
             traceback.print_exc()
 
-        result = re.search(pattern, value)
         if not result:
             raise ValueError("Invalid filename.extension")
         return result.group()
 
 
-@tool("load_code_file", args_schema=DocumentFilename, return_direct=False)
-def load_code_file(file_name):
+@tool("deobfuscate_code", args_schema=DocumentFilename, return_direct=False)
+def deobfuscate_code(file_name):
     """
-    Useful for retrieving code from a document in the filesystem. Given a file name, the tool will retrieve the file 
-    and copy the code inside of it, returning a string of code for the LLM to analyze. 
+    Useful for retrieving code from a document in the filesystem and deobfuscating the code. Given a 
+    file name, the tool will retrieve the file and analyze the code inside of it, returning a string of 
+    deobfuscated code for the user to use. When the code is returned, it has been successfully deobfuscated.
     """
 
     loader = GenericLoader.from_filesystem(
@@ -64,30 +66,29 @@ def load_code_file(file_name):
             suffixes=[".py", ".txt", ".cpp"],
             parser=LanguageParser(),
     )
+
     docs = loader.load()
     document_code = "\n\n\n".join([document.page_content for document in docs])
 
-    prompt = PromptTemplate.from_template("""You are an intelligent AI code deobfuscation bot. Your directive is to take a piece of
-        code and deobfuscate it, making it more understandable to the human programmer. Take each piece of deobfuscation step-by-step, so that
-        the final result is a block of code that makes sense as a whole, and the purpose of the code is understandable. Improve any 
-        potentially confusing variable names with better, self-documenting names.
+    prompt = PromptTemplate.from_template("""You are an intelligent AI code deobfuscation bot. 
+        Your directive is to take a piece of code and deobfuscate it, making it more understandable to 
+        the human programmer. Take each piece of deobfuscation step-by-step, so that the final result is 
+        a block of code that makes sense as a whole, and the purpose of the code is understandable. 
+        Improve any potentially confusing variable names with better, self-documenting names. 
         Your final answer MUST be in code format - output only a string of code with no backticks.
         Code content: {code_content}
     """)
 
-    deobfusc_chain = ({"code_content":RunnablePassthrough()} | prompt | gemini_llm)
-    result = deobfusc_chain.invoke(document_code)
-
-    # Sometimes the LLM outputs the code with ```python [CODE]```. This trims the first and last line of the code to remove the backticks.
-    # trimmed_result = "\n".join(result.split("\n")[1:-1])
+    deobfuscation_chain = ({"code_content":RunnablePassthrough()} | prompt | gemini_llm)
+    result = deobfuscation_chain.invoke(document_code)
 
     new_filename = f"deobfuscated_{file_name}"
-    print(f"\n\nYour deobfuscated code has been saved to the following file: ./{new_filename}")
     with open(new_filename, "w") as file:
         file.write(result)
+    print(f"\n\nYour deobfuscated code has been saved to the following file: ./{new_filename}\n\n")
 
     return result
-    
+
 
 
 
@@ -102,7 +103,7 @@ def main():
         Use AT MOST one call to load_code_file when it is needed.""")
 
     tools = load_tools(["serpapi"])
-    tools.extend([load_code_file])
+    tools.extend([deobfuscate_code])
 
     gemini_agent = create_react_agent(gemini_llm, tools, prompt)
     gemini_executor = AgentExecutor(
@@ -112,6 +113,10 @@ def main():
             early_stopping_method="generate", 
             verbose=True
     )
+
+    print("\n\nWelcome to the Code-Modifying Agent. The agent has access to these tools:\n")
+    for tool in gemini_executor.tools:
+        print(f"\n{tool.name}: \n\n{tool.description}")
 
     while True:
         try:
