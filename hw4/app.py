@@ -71,13 +71,21 @@ def load_code_file(file_name):
         code and deobfuscate it, making it more understandable to the human programmer. Take each piece of deobfuscation step-by-step, so that
         the final result is a block of code that makes sense as a whole, and the purpose of the code is understandable. Improve any 
         potentially confusing variable names with better, self-documenting names.
-        Your final answer MUST be in code format - output only a document of code. 
+        Your final answer MUST be in code format - output only a string of code with no backticks.
         Code content: {code_content}
     """)
 
     deobfusc_chain = ({"code_content":RunnablePassthrough()} | prompt | gemini_llm)
     result = deobfusc_chain.invoke(document_code)
-    
+
+    # Sometimes the LLM outputs the code with ```python [CODE]```. This trims the first and last line of the code to remove the backticks.
+    # trimmed_result = "\n".join(result.split("\n")[1:-1])
+
+    new_filename = f"deobfuscated_{file_name}"
+    print(f"\n\nYour deobfuscated code has been saved to the following file: ./{new_filename}")
+    with open(new_filename, "w") as file:
+        file.write(result)
+
     return result
     
 
