@@ -17,6 +17,7 @@ os.environ["LANGCHAIN_PROJECT"] = f"gensec-hw4"
 os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
 client = Client()
 
+
 gemini_llm = GoogleGenerativeAI(
     model="gemini-1.5-pro-latest",
     temperature=0,
@@ -72,7 +73,6 @@ def load_code(file_name) -> str:
         raise ValueError("The filename was not found. Try again.")
 
     document_code = "\n\n\n".join([document.page_content for document in docs])
-    print("document code: " , type(document_code))
     return document_code
 
 
@@ -112,7 +112,7 @@ def deobfuscate_code(file_name):
         the human programmer. Take each piece of deobfuscation step-by-step, so that the final result is 
         a block of code that makes sense as a whole, and the purpose of the code is understandable. 
         Improve any potentially confusing variable names with better, self-documenting names. 
-        Make sure to move imports or includes to the top of the code.
+        MAKE SURE to move imports or includes to the top of the code.
         Your final answer MUST be in code format - output only a string of code with no backticks.
         Code content: {code_content}
     """)
@@ -139,13 +139,15 @@ def comment_code(file_name) -> str:
     document_code = load_code(file_name)
 
     prompt = PromptTemplate.from_template("""You are an intelligent AI code commenting bot. 
-        Your directive is to take in a section of code and add documentation comments to it to make it
-        more understandable and well-documented. Make sure to keep imports or includes at the top of the code.
+        Your directive is to take in a section of code and add documentation docstrings to it in the Google format.
         Here are the rules to commenting:
-        1. Your comments must be using the Google style for each programming language.
-        3. You may only add comments to function declarations and class/enum declarations. No inline comments, and no constructor comments.
-        4. Keep your comments concise, less than 45 words.
-        5. Your final answer MUST be in code format - output only a string of code with NO BACKTICKS surrounding it. 
+        1. Your comments must be using the Google arg/return style for each programming language.
+        2. You may only add comments to function declarations and class/enum declarations. No inline comments, and no constructor comments.
+        3. Include Google-style format documentation for arguments and returns of each function.
+        4. Do NOT remove any code from the original - only add comments to the final result. 
+        5. Move all imports or includes to the top of the resulting code.
+        6. Your final answer MUST be in code format - output only a string of code with NO BACKTICKS surrounding it. 
+        Try this step-by-step and review the rules to make sure you follow them.
         Code content: {code_content}
     """)
 
