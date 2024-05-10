@@ -52,16 +52,14 @@ class DocumentFilename(BaseModel):
         return result.group()
 
 
-@tool("deobfuscate_code", args_schema=DocumentFilename, return_direct=True)
-def deobfuscate_code(file_name):
+def load_code(file_name) -> str:
     """
-    Useful for retrieving code from a document in the filesystem and deobfuscating the code. Given a 
-    file name, the tool will retrieve the file and analyze the code inside of it, returning a string of 
-    deobfuscated code for the user to use. When the code is returned, it has been successfully deobfuscated.
-    :param file_name: filename without path, with extension.
+    Loads a file from current directory, parsing the file into code and returning it as a string.
+    :param file_name: name of a file, including extension.
     :type file_name: str
+    :return: string of code from loaded documents
+    :rtype: str
     """
-
     loader = GenericLoader.from_filesystem(
             path=f"./{file_name}",
             glob="*",
@@ -74,6 +72,40 @@ def deobfuscate_code(file_name):
         raise ValueError("The filename was not found. Try again.")
 
     document_code = "\n\n\n".join([document.page_content for document in docs])
+    print("document code: " , type(document_code))
+    return document_code
+
+
+def save_edited_file(file_prefix, file_name, code_contents) -> None:
+    """
+    Saves a new file in current directory, given a filename, prefix, and file contents.
+    Displays location of saved file.
+    :param file_prefix: text to prepend to filename
+    :type file_prefix: str
+    :param file_name: name of original file
+    :type file_name: str
+    :param code_contents: string of code, formatted in a language
+    :type code_contents: str
+    """
+    new_filepath = f"./{file_prefix}{file_name}"
+    with open(new_filepath, "w") as file:
+        file.write(code_contents)
+    print(f"\n\nYour commented code has been saved to the following file: {new_filepath}\n\n")
+
+
+@tool("deobfuscate_code", args_schema=DocumentFilename, return_direct=True)
+def deobfuscate_code(file_name):
+    """
+    Useful for retrieving code from a document in the filesystem and deobfuscating the code. Given a 
+    file name, the tool will retrieve the file and analyze the code inside of it, returning a string of 
+    deobfuscated code for the user to use. When the code is returned, it has been successfully deobfuscated.
+    :param file_name: filename without path, with extension.
+    :type file_name: str
+    :return: modified deobfuscated code
+    :rtype: str
+    """
+
+    document_code = load_code(file_name)
 
     prompt = PromptTemplate.from_template("""You are an intelligent AI code deobfuscation bot. 
         Your directive is to take a piece of code and deobfuscate it, making it more understandable to 
@@ -86,37 +118,25 @@ def deobfuscate_code(file_name):
     """)
 
     deobfuscation_chain = ({"code_content":RunnablePassthrough()} | prompt | gemini_llm)
-    result = deobfuscation_chain.invoke(document_code)
+    final_code = deobfuscation_chain.invoke(document_code)
 
-    new_filename = f"deobfuscated_{file_name}"
-    with open(new_filename, "w") as file:
-        file.write(result)
-    print(f"\n\nYour deobfuscated code has been saved to the following file: ./{new_filename}\n\n")
+    save_edited_file("deobfuscated_", file_name, final_code)
 
-    return result
+    return final_code
 
 
 @tool("comment_code", args_schema=DocumentFilename, return_direct=True)
-def comment_code(file_name):
+def comment_code(file_name) -> str:
     """
     This tool will take a document of code in the filesystem and analyze it, adding comments
     in the process, and return an updated string of code that includes comments. 
     :param file_name: filename without path, with extension.
     :type file_name: str
+    :return: modified code with comments
+    :rtype: str
     """
 
-    loader = GenericLoader.from_filesystem(
-            path=f"./{file_name}",
-            glob="*",
-            suffixes=[".py", ".txt", ".cpp"],
-            parser=LanguageParser(parser_threshold=100),
-    )
-
-    docs = loader.load()
-    if not docs:
-        raise ValueError("The filename was not found. Try again.")
-
-    document_code = "\n\n\n".join([document.page_content for document in docs])
+    document_code = load_code(file_name)
 
     prompt = PromptTemplate.from_template("""You are an intelligent AI code commenting bot. 
         Your directive is to take in a section of code and add documentation comments to it to make it
@@ -130,14 +150,11 @@ def comment_code(file_name):
     """)
 
     commenting_chain = ({"code_content":RunnablePassthrough()} | prompt | gemini_llm)
-    result = commenting_chain.invoke(document_code)
+    final_code = commenting_chain.invoke(document_code)
 
-    new_filename = f"commented_{file_name}"
-    with open(new_filename, "w") as file:
-        file.write(result)
-    print(f"\n\nYour commented code has been saved to the following file: ./{new_filename}\n\n")
+    save_edited_file("commented_", file_name, final_code)
 
-    return result
+    return final_code
 
 
 
@@ -146,10 +163,9 @@ def comment_code(file_name):
 
 def main():
     base_prompt = hub.pull("langchain-ai/react-agent-template")
-    prompt = base_prompt.partial(instructions="""You are an agent that is used for helping the user view and deobfuscate code.
+    prompt = base_prompt.partial(instructions="""You are an agent that is used for helping the user deobfuscate and comment code.
         Be as helpful as possible. If you are unable to produce an answer that is helpful to the user, say so.
-        The user is allowed to look up information related to programming and deobfuscation ONLY. Deny them in any other case.
-        Use AT MOST one call to load_code_file when it is needed.""")
+        The user is allowed to look up information related to programming and deobfuscation ONLY. Deny them in any other case.""")
 
     tools = load_tools(["serpapi"])
     tools.extend([deobfuscate_code, comment_code])
@@ -158,7 +174,7 @@ def main():
     gemini_executor = AgentExecutor(
             agent=gemini_agent, 
             tools=tools, 
-            max_iterations=10, 
+            max_iterations=4, 
             early_stopping_method="generate", 
             verbose=True
     )
@@ -178,11 +194,11 @@ def main():
                 break
 
         except ValueError as v_error:
-            print(f"\n\nstr(v_error)")
+            print(f"\n\n{str(v_error)}")
         except Exception:
             traceback.print_exc()
 
-    print("Thanks for using the deobfuscator!")
+    print("Thanks for using code-modifying agent!")
 
 
 if __name__ == "__main__":
