@@ -18,7 +18,7 @@ os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
 client = Client()
 
 gemini_llm = GoogleGenerativeAI(
-    model="gemini-pro",
+    model="gemini-1.5-pro-latest",
     temperature=0,
     safety_settings = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE, 
@@ -52,12 +52,14 @@ class DocumentFilename(BaseModel):
         return result.group()
 
 
-@tool("deobfuscate_code", args_schema=DocumentFilename, return_direct=False)
+@tool("deobfuscate_code", args_schema=DocumentFilename, return_direct=True)
 def deobfuscate_code(file_name):
     """
     Useful for retrieving code from a document in the filesystem and deobfuscating the code. Given a 
     file name, the tool will retrieve the file and analyze the code inside of it, returning a string of 
     deobfuscated code for the user to use. When the code is returned, it has been successfully deobfuscated.
+    :param file_name: filename without path, with extension.
+    :type file_name: str
     """
 
     loader = GenericLoader.from_filesystem(
@@ -68,6 +70,9 @@ def deobfuscate_code(file_name):
     )
 
     docs = loader.load()
+    if not docs:
+        raise ValueError("The filename was not found. Try again.")
+
     document_code = "\n\n\n".join([document.page_content for document in docs])
 
     prompt = PromptTemplate.from_template("""You are an intelligent AI code deobfuscation bot. 
@@ -75,6 +80,7 @@ def deobfuscate_code(file_name):
         the human programmer. Take each piece of deobfuscation step-by-step, so that the final result is 
         a block of code that makes sense as a whole, and the purpose of the code is understandable. 
         Improve any potentially confusing variable names with better, self-documenting names. 
+        Make sure to move imports or includes to the top of the code.
         Your final answer MUST be in code format - output only a string of code with no backticks.
         Code content: {code_content}
     """)
@@ -90,6 +96,49 @@ def deobfuscate_code(file_name):
     return result
 
 
+@tool("comment_code", args_schema=DocumentFilename, return_direct=True)
+def comment_code(file_name):
+    """
+    This tool will take a document of code in the filesystem and analyze it, adding comments
+    in the process, and return an updated string of code that includes comments. 
+    :param file_name: filename without path, with extension.
+    :type file_name: str
+    """
+
+    loader = GenericLoader.from_filesystem(
+            path=f"./{file_name}",
+            glob="*",
+            suffixes=[".py", ".txt", ".cpp"],
+            parser=LanguageParser(parser_threshold=100),
+    )
+
+    docs = loader.load()
+    if not docs:
+        raise ValueError("The filename was not found. Try again.")
+
+    document_code = "\n\n\n".join([document.page_content for document in docs])
+
+    prompt = PromptTemplate.from_template("""You are an intelligent AI code commenting bot. 
+        Your directive is to take in a section of code and add documentation comments to it to make it
+        more understandable and well-documented. Make sure to keep imports or includes at the top of the code.
+        Here are the rules to commenting:
+        1. Your comments must be using the Google style for each programming language.
+        3. You may only add comments to function declarations and class/enum declarations. No inline comments, and no constructor comments.
+        4. Keep your comments concise, less than 45 words.
+        5. Your final answer MUST be in code format - output only a string of code with NO BACKTICKS surrounding it. 
+        Code content: {code_content}
+    """)
+
+    commenting_chain = ({"code_content":RunnablePassthrough()} | prompt | gemini_llm)
+    result = commenting_chain.invoke(document_code)
+
+    new_filename = f"commented_{file_name}"
+    with open(new_filename, "w") as file:
+        file.write(result)
+    print(f"\n\nYour commented code has been saved to the following file: ./{new_filename}\n\n")
+
+    return result
+
 
 
 
@@ -103,7 +152,7 @@ def main():
         Use AT MOST one call to load_code_file when it is needed.""")
 
     tools = load_tools(["serpapi"])
-    tools.extend([deobfuscate_code])
+    tools.extend([deobfuscate_code, comment_code])
 
     gemini_agent = create_react_agent(gemini_llm, tools, prompt)
     gemini_executor = AgentExecutor(
@@ -128,6 +177,8 @@ def main():
             else:
                 break
 
+        except ValueError as v_error:
+            print(f"\n\nstr(v_error)")
         except Exception:
             traceback.print_exc()
 
