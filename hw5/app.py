@@ -7,6 +7,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_community.callbacks import get_openai_callback
+from langchain_text_splitters import Language
 import traceback
 import os
 import re
@@ -44,10 +45,10 @@ def load_code(file_name) -> str:
     :rtype: str
     """
     loader = GenericLoader.from_filesystem(
-            path=f"./{file_name}",
+            path=f"sources/{file_name}",
             glob="*",
-            suffixes=[".py", ".txt", ".cpp"],
-            parser=LanguageParser(),
+            suffixes=[".c", ".cpp"],
+            parser=LanguageParser(parser_threshold=1000),
     )
 
     docs = loader.load()
@@ -55,6 +56,7 @@ def load_code(file_name) -> str:
         raise ValueError("The filename was not found. Try again.")
 
     document_code = "\n\n\n".join([document.page_content for document in docs])
+    print("Document code: ", document_code)
     return document_code
 
 

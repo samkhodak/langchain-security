@@ -9,7 +9,14 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
 import traceback
+from langsmith import Client
+import os
 
+
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_PROJECT"] = f"gensec-hw1"
+os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+client = Client()
 
 
 def embed_docs(documents, vector_db) -> None:
