@@ -36,12 +36,16 @@ MAX_PROMPT_TOKENS = 500
 
 
 def load_code(file_name) -> str:
-    """
-    Loads a file from current directory, parsing the file into code and returning it as a string.
-    :param file_name: name of a file, including extension.
-    :type file_name: str
-    :return: string of code from loaded documents
-    :rtype: str
+    """ Loads a file from current directory, parsing the file into code and returning it as a string.
+
+    Args:
+        file_name (str): name of a file, including extension
+
+    Raises:
+        ValueError: error when filename is not successfully found in filesystem.
+
+    Returns:
+        str: string of code from loaded documents
     """
     loader = GenericLoader.from_filesystem(
             path=f"sources/{file_name}",
@@ -58,18 +62,36 @@ def load_code(file_name) -> str:
     return document_code
 
 
-async def run_code_chain(document, chain):
+async def run_chain(chain, document):
+    """ Asynchronously invokes one chain and returns the response. 
+
+    Args:
+        chain (LangChain RunnableSequence): LangChain chain
+        document (str): String of document text to feed LLM chain.
+
+    Returns:
+        str: Result from chain
+    """    
     response = await chain.ainvoke(document)
     return response
 
 
-async def dual_code_chains(document, gemini_chain, gpt_chain):
-    async with asyncio.TaskGroup() as tg:
-        gemini_result = tg.create_task(run_code_chain(document, gemini_chain))
-        gpt_result = tg.create_task(run_code_chain(document, gpt_chain))
+async def dual_chains(chain_one, chain_two, document):
+    """ Asynchronously creates two chain tasks and executes both, gathering a tuple of results.
 
-    print(gemini_result.result())
-    print(gpt_result.result())
+    Args:
+        chain_one (LangChain RunnableSequence): LangChain chain
+        chain_two (LangChain RunnableSequence): LangChain chain
+        document (str): String of document text to feed LLM chain.
+
+    Returns:
+        Tuple[str,str]: results from both chains
+    """
+    async with asyncio.TaskGroup() as tg:
+        result_one = tg.create_task(run_chain(chain_one, document))
+        result_two = tg.create_task(run_chain(chain_two, document))
+
+    return result_one.result(), result_two.result()
 
 
 
@@ -112,7 +134,7 @@ def main():
                     raise RuntimeError(f"The document you are trying to check is too large for the {MAX_PROMPT_TOKENS} token limit.")
                 
                 start = time.perf_counter()
-                asyncio.run(dual_code_chains(document, gemini_chain, gpt_chain))
+                asyncio.run(dual_chains(gemini_chain, gpt_chain, document))
                 time_taken = time.perf_counter() - start
                 print(f"""\n\nTime taken to complete both requests: {"{:.2f}".format(time_taken)} seconds.""")
 
