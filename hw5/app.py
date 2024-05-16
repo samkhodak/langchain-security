@@ -62,8 +62,23 @@ def load_code(file_name) -> str:
 
 def main():
 
-    gemini_chain = gemini_llm | StrOutputParser()
-    gpt_chain = gpt_llm | StrOutputParser()
+    code_chain = lambda prompt, llm: (
+    {"code_content":RunnablePassthrough()} 
+    | prompt 
+    | llm
+    | StrOutputParser()
+    )
+
+    prompt = PromptTemplate.from_template("""You are an expert at spotting security vulnerabilities and bad practice in C and C++ code.
+        Your job is to take in a segment of code and identify the top three vulnerabilities that can be found in it. 
+        Keep your answer concise, but list out the top three results with enough detail that the reader can understand how to solve the security issue.
+        Your answer should be in the following format:
+        Here are three of the top security vulnerabilities in the provided [language] code.
+        Code content: {code_content}
+    """)
+
+    gemini_chain = code_chain(prompt, gemini_llm)
+    gpt_chain = code_chain(prompt, gpt_llm)
 
 
     while True:
