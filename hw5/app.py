@@ -27,7 +27,7 @@ gemini_llm = GoogleGenerativeAI(
         HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE, 
     }
 )
-gpt_llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+gpt_llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 
 # Maximum tokens allowed for a prompt, otherwise the chain call will be rejected.
@@ -87,9 +87,13 @@ def main():
     prompt = PromptTemplate.from_template("""You are an expert at spotting security vulnerabilities and bad practice in C and C++ code.
         Your job is to take in a segment of code and identify the top three vulnerabilities that can be found in it. 
         Keep your answer concise, but list out the top three results with enough detail that the reader can understand how to solve the security issue.
+        You are allowed to reference functions and one-line bits of code to help the reader, but do not include code blocks in your answer. Print all code lines on a new line.
         Your answer should be in the following format:
         Here are three of the top security vulnerabilities in the provided [language] code.
         1. [vulnerability 1]
+           - Issue: [explanation of vulnerability]
+           - Recommendation: [explanation of solution]
+
         ... and so on.
         Code content: {code_content}
     """)
