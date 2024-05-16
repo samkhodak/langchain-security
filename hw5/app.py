@@ -6,11 +6,9 @@ from langchain_community.document_loaders.parsers import LanguageParser
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
-from langchain_community.callbacks import get_openai_callback
-from langchain_text_splitters import Language
 import traceback
+import asyncio
 import os
-import re
 
 
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
@@ -59,9 +57,26 @@ def load_code(file_name) -> str:
     print("Document code: ", document_code)
     return document_code
 
+async def async_run(document, chain):
+    response = await chain.ainvoke(document)
+    return response
+
+async def async_aggr(document, chain1, chain2):
+    async with asyncio.TaskGroup() as tg:
+        task1 = tg.create_task(async_run(document,chain1))
+        task2 = tg.create_task(async_run(document,chain2))
+    
+    print(task1) 
+    print(task2)
+
+
+
+async def async_test(chain1, chain2, document):
+    await chain1.ainvoke()
+
+
 
 def main():
-
     code_chain = lambda prompt, llm: (
     {"code_content":RunnablePassthrough()} 
     | prompt 
@@ -88,8 +103,7 @@ def main():
                 document = load_code(line)
                 if (gemini_llm.get_num_tokens(document) > MAX_PROMPT_TOKENS):
                     raise RuntimeError(f"The document you are trying to check is too large for the {MAX_PROMPT_TOKENS} token limit.")
-                result = gemini_chain.invoke(document)
-                print(result)
+                asyncio.run(async_aggr(document, gemini_chain, gpt_chain))
 
             else:
                 break
