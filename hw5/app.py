@@ -7,6 +7,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 import traceback
+import time
 import asyncio
 import os
 
@@ -54,25 +55,24 @@ def load_code(file_name) -> str:
         raise ValueError("The filename was not found. Try again.")
 
     document_code = "\n\n\n".join([document.page_content for document in docs])
-    print("Document code: ", document_code)
     return document_code
 
-async def async_run(document, chain):
+
+async def run_code_chain(document, chain):
     response = await chain.ainvoke(document)
     return response
 
-async def async_aggr(document, chain1, chain2):
+
+async def dual_code_chains(document, gemini_chain, gpt_chain):
     async with asyncio.TaskGroup() as tg:
-        task1 = tg.create_task(async_run(document,chain1))
-        task2 = tg.create_task(async_run(document,chain2))
-    
-    print(task1) 
-    print(task2)
+        gemini_result = tg.create_task(run_code_chain(document, gemini_chain))
+        gpt_result = tg.create_task(run_code_chain(document, gpt_chain))
+
+    print(gemini_result.result())
+    print(gpt_result.result())
 
 
 
-async def async_test(chain1, chain2, document):
-    await chain1.ainvoke()
 
 
 
@@ -89,11 +89,14 @@ def main():
         Keep your answer concise, but list out the top three results with enough detail that the reader can understand how to solve the security issue.
         Your answer should be in the following format:
         Here are three of the top security vulnerabilities in the provided [language] code.
+        1. [vulnerability 1]
+        ... and so on.
         Code content: {code_content}
     """)
 
     gemini_chain = code_chain(prompt, gemini_llm)
     gpt_chain = code_chain(prompt, gpt_llm)
+
 
 
     while True:
@@ -103,7 +106,11 @@ def main():
                 document = load_code(line)
                 if (gemini_llm.get_num_tokens(document) > MAX_PROMPT_TOKENS):
                     raise RuntimeError(f"The document you are trying to check is too large for the {MAX_PROMPT_TOKENS} token limit.")
-                asyncio.run(async_aggr(document, gemini_chain, gpt_chain))
+                
+                start = time.perf_counter()
+                asyncio.run(dual_code_chains(document, gemini_chain, gpt_chain))
+                time_taken = time.perf_counter() - start
+                print(f"""\n\nTime taken to complete both requests: {"{:.2f}".format(time_taken)} seconds.""")
 
             else:
                 break
