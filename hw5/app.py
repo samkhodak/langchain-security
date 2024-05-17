@@ -154,7 +154,7 @@ def main():
     gpt_chain = final_chain(generative_prompt, verifying_prompt, gpt_llm)
 
 
-    print("Welcome to C/C++ Vulnerability Identifier. Store a C/C++ file in the sources folder and enter its name to have its vulnerabilities checked!")
+    print("\n\nWelcome to C/C++ Vulnerability Identifier. Store a C/C++ file in the sources folder and enter its name to have its vulnerabilities checked!")
 
     while True:
         try:
@@ -168,6 +168,7 @@ def main():
                 start = time.perf_counter()
                 gemini_result, gpt_result = asyncio.run(dual_chains(gemini_chain, gpt_chain, document))
                 time_taken = time.perf_counter() - start
+
                 print("\nGemini's Result: \n", gemini_result)
                 print("\nGPT-4o's Result: \n", gpt_result)
                 print(f"""\n\nTime taken to complete both requests: {"{:.2f}".format(time_taken)} seconds.""")
