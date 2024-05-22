@@ -1,5 +1,6 @@
 langchain
 langchain_google_genai
+langchain_openai
 langchain_experimental
 langchainhub
 google-search-results

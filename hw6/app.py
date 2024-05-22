@@ -1,9 +1,10 @@
 from langchain_google_genai import GoogleGenerativeAI, HarmCategory, HarmBlockThreshold
 from langchain.agents import AgentExecutor, create_react_agent, load_tools
 from langsmith import Client
-from langchain import hub
 from langchain_core.pydantic_v1 import BaseModel, Field, validator
 from langchain.tools import tool
+from langchain_core.prompts import PromptTemplate
+from textwrap import dedent
 import requests
 import socket
 import validators
@@ -45,13 +46,7 @@ class IPv4Input(BaseModel):
 @tool("retrieve_DNS_name", args_schema=IPv4Input, return_direct=False)
 def retrieve_DNS_name(ip_address):
     """
-    Given an IPv4 address, returns DNS hostname associated with it
-
-    :param ip_address: IPv4 address, without CIDR notation.
-    :type ip_address: str
-    :raises ValueError: Hostname is rejected if it's not able to be found.
-    :return: DNS hostname for IP passed in
-    :rtype: str
+    Given an IPv4 address, returns DNS hostname associated with it.
     """
     try:
         hostname, _, _ = socket.gethostbyaddr(ip_address)
@@ -64,17 +59,11 @@ def retrieve_DNS_name(ip_address):
 def ip_location_info(ip_address):
     """
     Get relevant location and organization information for an IP address.
-
-    :param ip_address: IPv4 address, without CIDR notation.
-    :type ip_address: str
-    :return: dictionary of location info, including organization
-    :rtype: dictionary of strings
     """
     response = requests.get(f'https://ipapi.co/{ip_address}/json/').json()
     location_info = {
         'location': f"{response.get('city','N/A')}, {response.get('region','N/A')} - {response.get('country_name','N/A')} ({response.get('continent_code','N/A')})",
-        'latitude': response.get('latitude', 'N/A'),
-        'longitude': response.get('longitude', 'N/A'),
+        'coordinates': f"Latitude: {response.get('latitude', 'N/A')} - Longitude: {response.get('longitude', 'N/A')}",
         'organization': response.get('org', 'N/A')
     }
     return location_info
@@ -84,11 +73,37 @@ def ip_location_info(ip_address):
 
 
 def main():
-    base_prompt = hub.pull("langchain-ai/react-agent-template")
-    prompt = base_prompt.partial(instructions="""You are an agent that is used for helping the user get information about IP addresses.
+    base_prompt = PromptTemplate.from_template(dedent("""
+        {instructions}
+
+        You have access to the following tools:
+
+        {tools}
+
+        To use a tool, please use the following format:
+
+            Thought: Do I need to use a tool? Yes
+            Action: the action to take, should be one of [{tool_names}]
+            Action Input: the input to the action
+            Observation: the result of the action
+
+        When you have a response to say to the Human, or if you do not need to use a tool, you MUST use the format:
+
+            Thought: Do I need to use a tool? No
+            Final Answer: [your response here]
+
+        Begin!
+
+        New input: {input}
+
+        {agent_scratchpad} 
+    """))
+
+    prompt = base_prompt.partial(instructions=dedent("""You are an agent that is used for helping the user get information about IP addresses.
         Be as helpful as possible. If you are unable to produce an answer that is helpful to the user, say so.
         The user is allowed to look up information related to IP addresses ONLY. Deny them in any other case.
-        Because your tools provide a lot of dense information, structure your response by separating each tool call's answer in a visually pleasing list.""")
+        Because your tools provide a lot of dense information, structure your final friendly response by separating each tool 
+        call's answer in a visually pleasing and list, with proper whitespace."""))
 
     tools = load_tools(["serpapi"])
     tools.extend([retrieve_DNS_name, ip_location_info])
@@ -103,7 +118,7 @@ def main():
     )
 
     for tool in gemini_executor.tools:
-        print(f"\n{tool.name}: \n\n{tool.description}")
+        print(f"\n{tool.name}: \n\n\t{tool.description}")
     
 
     while True:
