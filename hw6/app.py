@@ -8,6 +8,7 @@ from textwrap import dedent
 import requests
 import socket
 import validators
+import dns.resolver as resolver
 import traceback
 import os
 
@@ -99,6 +100,22 @@ def retrieve_ip(hostname):
         raise ValueError("The hostname is not valid. Please enter a valid URL or DNS hostname.")
 
 
+@tool("retrieve_DNS_records", args_schema=HostNameInput, return_direct=False)
+def retrieve_DNS_records(hostname):
+    """
+    Retrieves relevant DNS records for a DNS hostname (A, AAAA, NS, MX).
+    """
+    record_types = ['A', 'AAAA', 'NS', 'MX']
+    final_records = ""
+    for record_type in record_types:
+        try:
+            resolved_info = resolver.resolve(hostname, record_type).response
+            records = resolved_info.resolve_chaining().answer
+            final_records += f"\n{str(records)}\n"
+        except resolver.NoAnswer:
+            final_records += f"No {record_type} record for this hostname.\n\n"
+
+    return final_records
 
 
 
@@ -136,7 +153,7 @@ def main():
         call's answer in a visually pleasing list, with proper whitespace."""))
 
     tools = load_tools(["serpapi"])
-    tools.extend([retrieve_DNS_name, ip_location_info, retrieve_ip])
+    tools.extend([retrieve_DNS_name, ip_location_info, retrieve_ip, retrieve_DNS_records])
 
     gemini_agent = create_react_agent(gemini_llm, tools, prompt)
     gemini_executor = AgentExecutor(
@@ -145,6 +162,7 @@ def main():
             max_iterations=5, 
             verbose=True
     )
+
 
     print("\n\nThis agent is equipped with multiple tools that help you find information on IP addresses and DNS names.\n\n")
     for tool in gemini_executor.tools:
