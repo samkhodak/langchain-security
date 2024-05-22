@@ -12,11 +12,12 @@ import traceback
 import os
 
 
+
+
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = f"gensec-hw6"
 os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
 client = Client()
-
 
 gemini_llm = GoogleGenerativeAI(
     model="gemini-1.5-pro-latest",
@@ -27,6 +28,9 @@ gemini_llm = GoogleGenerativeAI(
         HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE, 
     }
 )
+
+
+
 
 class IPv4Input(BaseModel):
     """ 
@@ -43,6 +47,20 @@ class IPv4Input(BaseModel):
         return value
 
 
+class HostNameInput(BaseModel):
+    """For checking correctness of DNS hostname passed to tools. 
+
+    :param hostname: DNS hostname
+    :type hostname: str
+    """
+    hostname: str = Field(description="Should be a hostname such as www.google.com")
+    @validator('hostname')
+    def is_dns_address(cls, value) -> str:
+        if not validators.domain(value):
+            raise ValueError("Malformed hostname")
+        return value
+
+
 @tool("retrieve_DNS_name", args_schema=IPv4Input, return_direct=False)
 def retrieve_DNS_name(ip_address):
     """
@@ -52,7 +70,7 @@ def retrieve_DNS_name(ip_address):
         hostname, _, _ = socket.gethostbyaddr(ip_address)
         return hostname
     except socket.herror:
-        raise ValueError("The hostname is not valid. Please enter an IPv4 address with no CIDR notation.")
+        raise ValueError("The IP address is not valid. Please enter an IPv4 address with no CIDR notation.")
 
 
 @tool("ip_location_info", args_schema=IPv4Input, return_direct=False)
@@ -67,7 +85,19 @@ def ip_location_info(ip_address):
         'organization': response.get('org', 'N/A')
     }
     return location_info
-    
+
+
+@tool("retrieve_ip", args_schema=HostNameInput, return_direct=False)
+def retrieve_ip(hostname):
+    """
+    Given a DNS hostname, retrieve the IP associated with it.
+    """
+    try:
+        response = socket.gethostbyname(hostname)
+        return response
+    except socket.gaierror:
+        raise ValueError("The hostname is not valid. Please enter a valid URL or DNS hostname.")
+
 
 
 
@@ -99,24 +129,24 @@ def main():
         {agent_scratchpad} 
     """))
 
-    prompt = base_prompt.partial(instructions=dedent("""You are an agent that is used for helping the user get information about IP addresses.
+    prompt = base_prompt.partial(instructions=dedent("""You are an agent that is used for helping the user get IP and DNS information.
         Be as helpful as possible. If you are unable to produce an answer that is helpful to the user, say so.
-        The user is allowed to look up information related to IP addresses ONLY. Deny them in any other case.
+        The user is allowed to look up information with SERPAPI related to IP and DNS queries ONLY. Deny them in any other case.
         Because your tools provide a lot of dense information, structure your final friendly response by separating each tool 
-        call's answer in a visually pleasing and list, with proper whitespace."""))
+        call's answer in a visually pleasing list, with proper whitespace."""))
 
     tools = load_tools(["serpapi"])
-    tools.extend([retrieve_DNS_name, ip_location_info])
+    tools.extend([retrieve_DNS_name, ip_location_info, retrieve_ip])
 
     gemini_agent = create_react_agent(gemini_llm, tools, prompt)
     gemini_executor = AgentExecutor(
             agent=gemini_agent, 
             tools=tools, 
             max_iterations=5, 
-            early_stopping_method="generate", 
             verbose=True
     )
 
+    print("\n\nThis agent is equipped with multiple tools that help you find information on IP addresses and DNS names.\n\n")
     for tool in gemini_executor.tools:
         print(f"\n{tool.name}: \n\n\t{tool.description}")
     
