@@ -3,5 +3,4 @@ langchain_google_genai
 langchain_experimental
 langchainhub
 google-search-results
-dnspython
 validators
