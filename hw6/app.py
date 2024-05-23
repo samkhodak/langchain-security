@@ -5,8 +5,10 @@ from langchain_core.pydantic_v1 import BaseModel, Field, validator
 from langchain.tools import tool
 from langchain_core.prompts import PromptTemplate
 from textwrap import dedent
+from subprocess import run
 import requests
 import socket
+import shlex
 import validators
 import dns.resolver as resolver
 import traceback
@@ -118,6 +120,21 @@ def retrieve_DNS_records(hostname):
     return final_records
 
 
+@tool("ping_host", args_schema=IPv4Input, return_direct=False)
+def ping_host(ip_address):
+    """
+    Given an IPv4 address, will ping it and return the ping output. 
+    """
+    command = "ping"
+    flag = "/n" if os.name == 'nt' else "-c"
+    address = shlex.split(ip_address)[0]
+    completed_process = run([command, flag, "2", address], capture_output=True, timeout=2)
+    output = completed_process.stdout.decode('utf-8')
+
+    return output
+
+
+
 
 def main():
     base_prompt = PromptTemplate.from_template(dedent("""
@@ -138,6 +155,8 @@ def main():
 
             Thought: Do I need to use a tool? No
             Final Answer: [your response here]
+        
+        Do not attach backticks to any of your outputs, including thoughts, tool calls and final answers.
 
         Begin!
 
@@ -153,7 +172,7 @@ def main():
         call's answer in a visually pleasing list, with proper whitespace."""))
 
     tools = load_tools(["serpapi"])
-    tools.extend([retrieve_DNS_name, ip_location_info, retrieve_ip, retrieve_DNS_records])
+    tools.extend([retrieve_DNS_name, ip_location_info, retrieve_ip, retrieve_DNS_records, ping_host])
 
     gemini_agent = create_react_agent(gemini_llm, tools, prompt)
     gemini_executor = AgentExecutor(
@@ -162,6 +181,7 @@ def main():
             max_iterations=5, 
             verbose=True
     )
+
 
 
     print("\n\nThis agent is equipped with multiple tools that help you find information on IP addresses and DNS names.\n\n")
@@ -173,6 +193,7 @@ def main():
         try:
             line = input("\n\nEnter query (\"exit\" to end) >>  ")
             if line and line != "exit": 
+                print("\n\n\nPlease wait while the Agent completes your request.\n\n\n")
                 result = gemini_executor.invoke({"input":line})
                 print(f"\n\n{result.get('output')}")
             else:
