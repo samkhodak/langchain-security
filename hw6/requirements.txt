@@ -1,5 +1,5 @@
 langchain
-langchain_google_genai
+langchain_openai
 langchain_experimental
 google-search-results
 validators
