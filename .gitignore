@@ -4,3 +4,4 @@ __pycache__/
 hw1/chroma/
 .vscode
 .env
+INFECTED*
