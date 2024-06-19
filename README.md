@@ -1,10 +1,19 @@
-# gensec-Khodakovskiy-khod2
+# LangChain Security Exercises
 
-## Class objectives so far
+This repo stores all of the exercises I completed in learning LangChain features and creating security-based LLM chains and agents.
 
-- [ ] [Set up lab](https://codelabs.cs.pdx.edu/labs/G1.1_Setup/index.html?index=..%2F..cs410g#5)
-- [ ] [Do exercises](https://codelabs.cs.pdx.edu/labs/G1.4_ModelTesting/index.html?index=..%2F..cs410g#0)
+## Setup
 
-## Project status
+Each folder contains a self-contained program that can be set up by running the following commands within each directory:
 
-Will be done later!
+```
+virtualenv -p python3 env 
+source env/bin/activate
+pip install -r requirements.txt
+```
+
+## Running
+
+After installing, run each file with python:
+
+``` python3 app.py```

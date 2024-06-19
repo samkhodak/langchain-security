@@ -1,7 +1,6 @@
 env/
 *.pyc
 __pycache__/
-hw1/chroma/
+chroma/
 .vscode
 .env
-INFECTED*
